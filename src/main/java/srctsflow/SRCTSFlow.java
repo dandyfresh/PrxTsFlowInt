@@ -20,12 +20,16 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 import javax.imageio.ImageIO;
 import org.opencv.core.Mat;
 import org.opencv.dnn.Net;
@@ -60,58 +64,78 @@ public class SRCTSFlow extends ModeloGrafico {
      * @param args the command line arguments
      */
     public static void main(String[] args) {
-        FileWriter fileWriter = null;
+        
         try {
+            SRCTSFlow mod = new SRCTSFlow();
+            String ruta = "D:\\datos\\recme\\data\\tensor\\modelos_TF\\coco_resnet101\\faster_rcnn_resnet101_coco_2018_01_28\\saved_model";
+            mod.Init("D:/java/librerias/TensorFlow/tensorflow_jni.dll");
+            SavedModelBundle model = SavedModelBundle.load(ruta, "serve");
 
-//            String ruta = "E:\\modelos\\personas\\saved_model";
-//            SavedModelBundle model = SavedModelBundle.load(ruta);
-//            mod.Init("D:/java/librerias/TensorFlow/tensorflow_jni.dll");
-////            printSignature(model);
-//            final String filename = "D:\\temp\\RES_1253.jpg";
-//            // final String filename = args[0];
-//            int[] imageSize = mod.getImageSize(filename);
-//            // //          System.out.println("width: " + imageSize[0] + " height: " + imageSize[1]);
-//            List<Tensor<?>> outputs = null;
-//
-//            //    String res= new String(model.session().runner, StandardCharsets.UTF_8);
-//            try (Tensor<UInt8> input = mod.makeImageTensor(filename)) {
-//                outputs
-//                        = model
-//                                .session()
-//                                .runner()
-//                                .feed("", input)
-//                                .fetch("output_node0")
-//                                .run();
-//            }
-//            try (Tensor<Float> scoresT = outputs.get(0).expect(Float.class);) {
-//                // All these tensors have:
-//                // - 1 as the first dimension
-//                // - maxObjects as the second dimension
-//                // While boxesT will have 4 as the third dimension (2 sets of (x, y) coordinates).
-//                // This can be verified by looking at scoresT.shape() etc.
-//                int maxObjects = (int) scoresT.shape()[1];
-//                //          System.out.println(maxObjects);
-//                float[] scores = scoresT.copyTo(new float[1][maxObjects])[0];
-//                // float[] classes = classesT.copyTo(new float[1][maxObjects])[0];
-//                // float[][] boxes = boxesT.copyTo(new float[1][maxObjects][4])[0];
-//                // Print all objects whose score is at least 0.5.
-//                //          System.out.printf("* %s\n", filename);
-//                boolean foundSomething = false;
-//                for (int i = 0; i < scores.length; ++i) {
-//                    if (scores[i] > 0.01) {
-//
-//                        foundSomething = true;
-//                        // //          System.out.printf("\tFound %-20s (score: %.4f)\n", (int) classes[i], scores[i]);
-//                        //          System.out.printf("\tFound %d \t (score: %.4f) \t (xmin: %d \t ymin: %d \t xmax: %d \t ymax: %d)\n",
-//                        //                  (int) classes[i], mod.update(scores[i]), (int) (boxes[i][1] * imageSize[0]),
-//                        //                  (int) (boxes[i][0] * imageSize[1]), (int) (boxes[i][3] * imageSize[0]),
-//                        //                  (int) (boxes[i][2] * imageSize[1]));
-//                    }
-//                }
-//                if (!foundSomething) {
-//                    //          System.out.println("No objects detected with a high enough score.");
-//                }
-//            }
+//            printSignature(model);
+            Path dir = Paths.get("C:\\Users\\dandyfresh\\Videos\\pru3\\");
+            List<String> imgs = Files.list(dir)
+                    // Filtrar por archivos con extensión ".jpg" o ".jpeg"
+                    .filter(path -> Files.isRegularFile(path)
+                    && path.toString().toLowerCase().endsWith(".jpg")
+                    || path.toString().toLowerCase().endsWith(".jpeg"))
+                    // Convertir los paths a cadenas y colectar los resultados en una lista
+                    .map(Path::toString)
+                    .collect(Collectors.toList());
+
+            //imgs.add("C:\\Users\\dandyfresh\\Videos\\pru3\\V_C_1713385653106_F_27280.JPEG");
+            for (String filename : imgs) {
+                // final String filename = args[0];
+                long ini=System.currentTimeMillis();
+                int[] imageSize = mod.getImageSize(filename);
+                // //          System.out.println("width: " + imageSize[0] + " height: " + imageSize[1]);
+                List<Tensor<?>> outputs = null;
+
+                //    String res= new String(model.session().runner, StandardCharsets.UTF_8);
+                try (Tensor<UInt8> input = mod.makeImageTensor(filename)) {
+                    outputs
+                            = model
+                                    .session()
+                            .runner()
+                            .feed("image_tensor", input)
+                            .fetch("detection_scores")
+                            .fetch("detection_classes")
+                            .fetch("detection_boxes")
+                            .run();
+                }
+                try (Tensor<Float> scoresT = outputs.get(0).expect(Float.class);) {
+                    Tensor<Float> classesT = outputs.get(1).expect(Float.class);
+                    Tensor<Float> boxesT = outputs.get(2).expect(Float.class);
+                    // All these tensors have:
+                    // - 1 as the first dimension
+                    // - maxObjects as the second dimension
+                    // While boxesT will have 4 as the third dimension (2 sets of (x, y) coordinates).
+                    // This can be verified by looking at scoresT.shape() etc.
+
+                    int maxObjects = (int) scoresT.shape()[1];
+                    //          System.out.println(maxObjects);
+                    float[] scores = scoresT.copyTo(new float[1][maxObjects])[0];
+                    float[] classes = classesT.copyTo(new float[1][maxObjects])[0];
+                    float[][] boxes = boxesT.copyTo(new float[1][maxObjects][4])[0];
+                    // Print all objects whose score is at least 0.5.
+                    //          System.out.printf("* %s\n", filename);
+                    boolean foundSomething = false;
+                    for (int i = 0; i < scores.length; ++i) {
+                        if (scores[i] > 0.01) {
+
+                            foundSomething = true;
+                            // //          System.out.printf("\tFound %-20s (score: %.4f)\n", (int) classes[i], scores[i]);
+//                            System.out.printf("\tFound %d \t (score: %.4f) \t (xmin: %d \t ymin: %d \t xmax: %d \t ymax: %d)\n",
+//                                    (int) classes[i], mod.update(scores[i]), (int) (boxes[i][1] * imageSize[0]),
+//                                    (int) (boxes[i][0] * imageSize[1]), (int) (boxes[i][3] * imageSize[0]),
+//                                    (int) (boxes[i][2] * imageSize[1]));
+                        }
+                    }
+                    if (!foundSomething) {
+                        //          System.out.println("No objects detected with a high enough score.");
+                    }
+                }
+                System.out.println("tiempo:"+(System.currentTimeMillis()-ini));
+            }
         } catch (Exception ex) {
             Logger.getLogger("").log(Level.SEVERE, null, ex);
         }
@@ -228,8 +252,8 @@ public class SRCTSFlow extends ModeloGrafico {
                 boxesT.close();
                 boolean foundSomething = false;
                 for (int i = 0; i < scores.length; ++i) {
-                  
-                   double score = update(scores[i]);
+
+                    double score = update(scores[i]);
                     if (score >= model.getMinScore()) {
 
                         foundSomething = true;
@@ -271,7 +295,7 @@ public class SRCTSFlow extends ModeloGrafico {
                         }
                         an.getObject().get(ind).addBndbox(bn, 1, prop);
                         System.out.printf("\tFound %d ID:%s NOMBRE:%s \t (score: %.4f) \t (xmin: %d \t ymin: %d \t xmax: %d \t ymax: %d)\n",
-                                (int) classes[i], 
+                                (int) classes[i],
                                 an.getObject().get(ind).getName(),
                                 an.getObject().get(ind).getLabel(),
                                 bn.getScore(),
@@ -282,7 +306,7 @@ public class SRCTSFlow extends ModeloGrafico {
                     }
                 }
                 if (!foundSomething) {
-                             System.out.println("TSFLOW:NO ENCONTRO OBJECCTOS CON PROBABILIDAD >  "+ model.getMinScore());
+                    System.out.println("TSFLOW:NO ENCONTRO OBJECCTOS CON PROBABILIDAD >  " + model.getMinScore());
                 }
 
                 res.add(an);
